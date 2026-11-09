@@ -20,7 +20,7 @@ asxdb = "asxdb.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-asxdb = ["schema.sql"]
+asxdb = ["schema.sql", "migrations/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

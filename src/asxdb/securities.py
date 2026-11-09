@@ -16,57 +16,63 @@ def add_security(
     listed_on: str | None = None,
     delisted_on: str | None = None,
     delisting_reason: str | None = None,
+    commit: bool = True,
 ) -> int:
     """Insert a security with its first ASX code and return its id."""
-    with conn:
-        cur = conn.execute(
-            """INSERT INTO securities
-                   (name, isin, security_type, listed_on, delisted_on, delisting_reason)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (name, isin, security_type, listed_on, delisted_on, delisting_reason),
-        )
-        security_id = cur.lastrowid
-        conn.execute(
-            """INSERT INTO ticker_history (security_id, ticker, valid_from, valid_to)
-               VALUES (?, ?, ?, ?)""",
-            (security_id, ticker.upper(), valid_from, delisted_on),
-        )
+    cur = conn.execute(
+        """INSERT INTO securities
+               (name, isin, security_type, listed_on, delisted_on, delisting_reason)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (name, isin, security_type, listed_on, delisted_on, delisting_reason),
+    )
+    security_id = cur.lastrowid
+    conn.execute(
+        """INSERT INTO ticker_history (security_id, ticker, valid_from, valid_to)
+           VALUES (?, ?, ?, ?)""",
+        (security_id, ticker.upper(), valid_from, delisted_on),
+    )
+    if commit:
+        conn.commit()
     return security_id
 
 
 def change_ticker(
-    conn: sqlite3.Connection, security_id: int, new_ticker: str, effective: str
+    conn: sqlite3.Connection, security_id: int, new_ticker: str, effective: str,
+    *, commit: bool = True,
 ) -> None:
     """Record a code change: the old code ends the day before `effective`."""
-    with conn:
-        cur = conn.execute(
-            """UPDATE ticker_history
-               SET valid_to = date(?, '-1 day')
-               WHERE security_id = ? AND valid_to IS NULL""",
-            (effective, security_id),
-        )
-        if cur.rowcount != 1:
-            raise ValueError(f"security {security_id} has no current ticker")
-        conn.execute(
-            "INSERT INTO ticker_history (security_id, ticker, valid_from) VALUES (?, ?, ?)",
-            (security_id, new_ticker.upper(), effective),
-        )
+    cur = conn.execute(
+        """UPDATE ticker_history
+           SET valid_to = date(?, '-1 day')
+           WHERE security_id = ? AND valid_to IS NULL""",
+        (effective, security_id),
+    )
+    if cur.rowcount != 1:
+        raise ValueError(f"security {security_id} has no current ticker")
+    conn.execute(
+        "INSERT INTO ticker_history (security_id, ticker, valid_from) VALUES (?, ?, ?)",
+        (security_id, new_ticker.upper(), effective),
+    )
+    if commit:
+        conn.commit()
 
 
 def delist(
-    conn: sqlite3.Connection, security_id: int, last_trading_day: str, reason: str | None = None
+    conn: sqlite3.Connection, security_id: int, last_trading_day: str, reason: str | None = None,
+    *, commit: bool = True,
 ) -> None:
     """Mark a security delisted. Nothing is deleted."""
-    with conn:
-        conn.execute(
-            "UPDATE securities SET delisted_on = ?, delisting_reason = ? WHERE security_id = ?",
-            (last_trading_day, reason, security_id),
-        )
-        conn.execute(
-            """UPDATE ticker_history SET valid_to = ?
-               WHERE security_id = ? AND valid_to IS NULL""",
-            (last_trading_day, security_id),
-        )
+    conn.execute(
+        "UPDATE securities SET delisted_on = ?, delisting_reason = ? WHERE security_id = ?",
+        (last_trading_day, reason, security_id),
+    )
+    conn.execute(
+        """UPDATE ticker_history SET valid_to = ?
+           WHERE security_id = ? AND valid_to IS NULL""",
+        (last_trading_day, security_id),
+    )
+    if commit:
+        conn.commit()
 
 
 def resolve_ticker(conn: sqlite3.Connection, ticker: str, on_date: str) -> int | None:
