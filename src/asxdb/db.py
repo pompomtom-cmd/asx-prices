@@ -6,8 +6,15 @@ import sqlite3
 from importlib import resources
 from pathlib import Path
 
-SCHEMA_VERSION = 1
 DEFAULT_DB_PATH = Path("data/asx.sqlite")
+
+# Each entry upgrades the schema by one version. Never edit a released
+# entry; add a new one instead.
+MIGRATIONS = [
+    "schema.sql",                           # v1
+    "migrations/002_listing_snapshots.sql",  # v2
+]
+SCHEMA_VERSION = len(MIGRATIONS)
 
 
 def connect(path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
@@ -25,14 +32,15 @@ def connect(path: str | Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    """Apply the schema. Future versions add numbered steps here."""
+    """Apply any migrations newer than the database's user_version."""
     (version,) = conn.execute("PRAGMA user_version").fetchone()
     if version > SCHEMA_VERSION:
         raise RuntimeError(
             f"Database schema v{version} is newer than this code (v{SCHEMA_VERSION})."
         )
-    if version < 1:
-        sql = resources.files("asxdb").joinpath("schema.sql").read_text()
+    pkg = resources.files("asxdb")
+    for target in range(version + 1, SCHEMA_VERSION + 1):
+        sql = pkg.joinpath(MIGRATIONS[target - 1]).read_text()
         with conn:
             conn.executescript(sql)
-            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            conn.execute(f"PRAGMA user_version = {target}")

@@ -15,6 +15,26 @@ asxdb info          # row counts
 pytest
 ```
 
+## Daily use
+
+```bash
+asxdb sync-listings                 # download today's ASX listed-companies file
+asxdb sync-listings --file x.csv    # or load a saved copy
+asxdb import-delisted delisted.csv  # historical delistings you've collected
+```
+
+`sync-listings` compares the file with the previous one. New codes become
+listings, missing codes become delistings (dated to the last day they were
+seen), and a missing code whose company name matches a new code is treated as
+a code change. It refuses a file that would delist more than 5% of codes, since
+that usually means a broken download (`--force` overrides). Each download is
+kept in `data/raw/listed_companies/`.
+
+Run it once each trading day, after the close. Listing and delisting dates are
+only known from the day you start. For older delistings, use
+`import-delisted` with a CSV of `ticker,name,delisted_on` plus optional
+`listed_on,reason,isin`.
+
 ## How the data is modelled
 
 - **Raw prices only.** `daily_prices` holds prices exactly as traded. Adjusted
@@ -34,8 +54,8 @@ pytest
 
 ## Roadmap
 
-1. Repo and schema (this release)
-2. Security master: daily ASX listed-companies snapshot, recording new
+1. Repo and schema (done)
+2. Security master (done): daily ASX listed-companies snapshot, recording new
    listings, delistings and code changes
 3. Backfill from free sources plus a daily update job with data-quality checks
 4. A backtest-friendly query API
